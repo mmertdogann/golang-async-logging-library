@@ -41,9 +41,7 @@ func New(w io.Writer) *Alog {
 func (al Alog) Start() {
 	for {
 		msg := <-al.msgCh
-		go func(msg string) {
-			al.write(msg, nil)
-		}(msg)
+		go al.write(msg, nil)
 	}
 }
 
@@ -55,6 +53,14 @@ func (al Alog) formatMessage(msg string) string {
 }
 
 func (al Alog) write(msg string, wg *sync.WaitGroup) {
+	al.m.Lock()
+	defer al.m.Unlock()
+	_, err := al.dest.Write([]byte(al.formatMessage(msg)))
+	if err != nil {
+		go func(err error) {
+			al.errorCh <- err
+		}(err)
+	}
 
 }
 
@@ -80,13 +86,5 @@ func (al Alog) Stop() {
 
 // Write synchronously sends the message to the log output
 func (al Alog) Write(msg string) (int, error) {
-	al.m.Lock()
-	val, err := al.dest.Write([]byte(al.formatMessage(msg)))
-	al.m.Unlock()
-	if err != nil {
-		go func(errCh chan error, err error) {
-			al.errorCh <- err
-		}(al.errorCh, err)
-	}
-	return val, err
+	return al.dest.Write([]byte(al.formatMessage(msg)))
 }
